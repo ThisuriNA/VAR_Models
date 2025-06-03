@@ -1,0 +1,458 @@
+---
+title: "Vector Auto Regressive"
+author: "A.T.N.Athukorala - AS2021607"
+date: "2024-08-07"
+output: html_document
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE }
+
+library(tidyverse)
+library(tseries)
+library(vars)
+library(forecast)
+library(fUnitRoots)
+library(readxl)
+library(GGally)
+library(stargazer)
+library(MLmetrics)
+```
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+data1 <- read_excel("Smoothed.xlsx")
+data2 <- ts(data1,start = c(1990,1),end = c(2022,4), frequency = 4)
+
+train_set1 <-as.ts(data2[(1:104),])
+test_set1 <- as.ts(data2[(105:132),])
+
+```
+
+
+
+# Check the Correlation between variables
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,fig.height=8,fig.width=16}
+
+scatter_matrix <- ggpairs(data1, columns =c(1:5),
+                          title = "Scatter Plot Matrix for Smoothed Climate indices",
+                          axisLabels = "show")
+scatter_matrix
+```
+
+
+
+
+# Time series Plots
+
+#### Time series plot for variable Sea Level(smoothed data)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+autoplot(data2[,1])+ ylab("Sea Level (mm)")
+
+```
+
+
+#### Time series plot for variable Drought(smoothed data)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+autoplot(data2[,2])+ ylab("Consecutive Dry Days(Days)")
+```
+
+
+#### Time series plot for variable Lower Temperatues(smoothed data)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+autoplot(data2[,3])+ ylab("Lower Temperatues(below 10th percentile)")
+
+```
+
+
+#### Time series plot for variable Higher Temperatues(smoothed data)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+autoplot(data2[,4])+ ylab("Higher Temperatues(above 90th percentile)")
+
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,fig.height=8,fig.width=16}
+
+plot.ts(data2,main = "Time series plot for each variable")
+
+```
+
+# ACF plots for for each Variable
+
+#### ACF plot for variable Sea level 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+Acf(data2[,1], main = " Sea level")
+
+```
+
+#### ACF plot for variable Drought
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+Acf(data2[,2], main = " Sea level")
+```
+
+#### ACF plot for variable Lower Temperature 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+Acf(data2[,3], main = "  Lower Temperature")
+```
+
+#### ACF plot for variable Higher Temperature 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+Acf(data2[,4], main = " Higher Temperature ")
+```
+
+#### ACF plot for variable Precipitation
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+Acf(data2[,5], main = " Precipitation")
+```
+
+# Time series plots for differenced data
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA, fig.height=8,fig.width=16}
+
+dif_data2 <- diff(data2)
+plot.ts(dif_data2, main = "Time series plot for differenced data")
+
+```
+
+# Check the stationarity of differenced data
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+adf_test <- apply(dif_data2, 2, adf.test)
+adf_test
+
+```
+Since only one variable(Higher Temperature) is stationary(p-value < 0.05), have to apply 2nd order differencing to the smoothed data.
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,fig.height=8,fig.width=16}
+
+df2 <- diff(dif_data2)
+plot.ts(df2, main = "Time series plot for Diff_diff_data")
+
+```
+
+df2 <- diff(diff())
+
+# Check the stationarity of 2nd order differenced data
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+apply(df2, 2, adf.test)
+
+```
+According to the above result, all the variables are stationary. (p-value<0.05)
+
+
+# Select suitable lag-length
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+lags_select <- VARselect(df2,lag.max = 8, type = "const")
+lags_select
+
+```
+When considering AIC values under lag = 8 it gives the least AIC value, therefore p = 5
+
+
+# Fit the VAR model(VAR(5))
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+var_model <- VAR(df2, p = 5, type = "const")
+var_model
+summary(var_model)
+```
+
+# VAR(5) estimation
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,results='hide'}
+
+stargazer(var_model$varresult,type = "text",style = "aer", title = "VAR(5)", column.labels = c("SL","CDD","T10","T90","PRP"))
+
+```
+
+
+
+
+# Model diagnostic
+
+#### Check the independency of residuals
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+serial.test(var_model,lags.pt = 27)
+
+```
+
+
+#### Check the heteroskedasticity 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+arch.test(var_model,lags.multi = 12, multivariate.only = TRUE)
+
+```
+
+#### Check the Normality Assumption
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+normality.test(var_model,multivariate.only = TRUE)
+
+
+```
+
+
+
+
+# VAR(2)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+var_model2 <- VAR(df2, p = 2, type = "const")
+var_model2
+summary(var_model2)
+
+```
+
+# VAR(2) estimation
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,results='hold'}
+
+stargazer(var_model2$varresult,type = "text",style = "aer", title = "VAR(5)", column.labels = c("SL","CDD","T10","T90","PRP"))
+
+
+```
+
+
+
+# Model diagnostic
+
+#### Check the independency of residuals
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+serial.test(var_model2,lags.pt = 65)
+
+```
+
+
+#### Check the heteroskedasticity 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+arch.test(var_model2,lags.multi = 12, multivariate.only = TRUE)
+
+```
+
+
+#### Check the Normality Assumption
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+normality.test(var_model2,multivariate.only = TRUE)
+
+```
+
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA, results='hide'}
+train_set1
+df_2 <- diff(diff(train_set1))
+df_2
+fit1 <- VAR(df_2,p = 2, type = "const")
+fit2 <- VAR(df_2,p = 5, type = "const")
+summary(fit1)
+
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA, results='hide'}
+
+df_2 <- diff(train_set1, differences = 2)
+df_2
+fit2 <- VAR(df_2,p = 3, type = "const")
+fit2
+  forecast_values <- forecast(fit2,h=28)
+print(forecast_values)
+
+```
+
+
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA, results='hide'}
+
+df_2 <- diff(diff(train_set1))
+fit1 <- VAR(df_2,p = 10, type = "const")
+forcast_data1 <- forecast(fit1, 28)
+forcast_data1
+  
+```
+
+
+
+
+
+
+
+
+# Forecasting
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+forcast_data1 <- forecast(fit1, 28)
+forcast_data1
+plot(forcast_data1, xlab = "Year", main = "Forecast from VAR(2)")
+forecast1<-as.data.frame(forcast_data1)
+forecast1_grouped<-forecast1 %>% group_by(Series)
+view(forecast1_grouped)
+point_fcast<-forecast1$`Point Forecast`
+view(point_fcast)
+forcast_data2 <- forecast(fit2, 28)
+plot(forcast_data2, xlab = "Year", main = "Forecast from VAR(5)")
+
+
+
+
+```
+
+
+
+
+
+
+# Forecasting model wise
+## VAR(5)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,fig.height=8,fig.width=16}
+
+forecast1 <- predict(var_model,n.ahead =12, ci = 0.95)
+fanchart(forecast1, names = "sl")
+fanchart(forecast1, names = "cdd")
+fanchart(forecast1, names = "t10")
+fanchart(forecast1, names = "t90")
+fanchart(forecast1, names = "prp")
+```
+
+
+## VAR(2)
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA,fig.height=8,fig.width=16}
+
+forecast2 <- predict(var_model2,n.ahead =12, ci = 0.95)
+fanchart(forecast2, names = "sl")
+fanchart(forecast2, names = "cdd")
+fanchart(forecast2, names = "t10")
+fanchart(forecast2, names = "t90")
+fanchart(forecast2, names = "prp")
+
+
+```
+
+# Fit the VAR model(VAR(3))
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+var_model <- VAR(df2, p = 3, type = "const")
+var_model
+summary(var_model)
+```
+
+# Model diagnostic
+
+#### Check the independency of residuals
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+serial.test(var_model,lags.pt = 60)
+
+```
+
+
+#### Check the heteroskedasticity 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+arch.test(var_model,lags.multi = 12, multivariate.only = TRUE)
+
+```
+
+#### Check the Normality Assumption
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+normality.test(var_model,multivariate.only = TRUE)
+
+
+```
+
+
+# Fit the VAR model(VAR(4))
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+var_model <- VAR(df2, p = 4, type = "const")
+var_model
+summary(var_model)
+```
+
+# Model diagnostic
+
+#### Check the independency of residuals
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+serial.test(var_model,lags.pt = 33)
+
+```
+
+
+#### Check the heteroskedasticity 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+arch.test(var_model,lags.multi = 12, multivariate.only = TRUE)
+
+```
+
+#### Check the Normality Assumption
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+normality.test(var_model,multivariate.only = TRUE)
+
+
+```
+
+# Fit the VAR model(VAR(6))
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+var_model <- VAR(df2, p = 6, type = "const")
+var_model
+summary(var_model)
+```
+
+# Model diagnostic
+
+#### Check the independency of residuals
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+serial.test(var_model,lags.pt = 23)
+
+```
+
+
+#### Check the heteroskedasticity 
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+arch.test(var_model,lags.multi = 12, multivariate.only = TRUE)
+
+```
+
+#### Check the Normality Assumption
+```{r,echo=FALSE,warning=FALSE,message=FALSE,comment=NA}
+
+normality.test(var_model,multivariate.only = TRUE)
+
+
+```
+?MAPE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
